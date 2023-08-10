@@ -1,0 +1,39 @@
+{
+  "version": "2.0",
+  "extensionBundle": {
+    "id": "Microsoft.Azure.Functions.ExtensionBundle",
+    "version": "[4.0.0, 5.0.0)"
+  },
+  "extensions": {
+    "eventHubs": {
+      "maxEventBatchSize" : 10,
+      "batchCheckpointFrequency" : 2,
+      "prefetchCount" : 100,
+      "initialOffsetOptions" : {
+        "type" : "fromStart"
+      },
+      "clientRetryOptions": {
+        "maximumRetries": 5
+      }
+    },
+    "http": {
+      "routePrefix": ""
+    }
+  },
+  "functions": [ "Info", "EventHubNodoReEventProcessor" ],
+  "logging": {
+    "applicationInsights": {
+      "samplingSettings": {
+        "isEnabled": false
+      }
+    },
+    "fileLoggingMode": "always",
+    "logLevel": {
+      "default": "Debug",
+      "Host.Results": "Information",
+      "Function": "Error",
+      "Function.EventHubNodoReEventProcessor": "Debug",
+      "Host.Aggregator": "Trace"
+    }
+  }
+}
