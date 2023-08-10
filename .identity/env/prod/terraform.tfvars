@@ -6,6 +6,6 @@ tags = {
   CreatedBy   = "Terraform"
   Environment = "Prod"
   Owner       = "pagoPA"
-  Source      = "https://github.com/pagopa/pagopa-nodo-re-to-datastore"
+  Source      = "https://github.com/pagopa/pagopa-nodo-re-to-tablestorage"
   CostCenter  = "TS310 - PAGAMENTI & SERVIZI"
 }

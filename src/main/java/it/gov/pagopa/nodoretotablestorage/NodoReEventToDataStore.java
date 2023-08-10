@@ -1,20 +1,23 @@
-package it.gov.pagopa.nodoretodatastore;
+package it.gov.pagopa.nodoretotablestorage;
 
+import com.azure.data.tables.TableClient;
+import com.azure.data.tables.TableServiceClient;
+import com.azure.data.tables.TableServiceClientBuilder;
+import com.azure.data.tables.models.TableEntity;
+import com.azure.data.tables.models.TableTransactionAction;
+import com.azure.data.tables.models.TableTransactionActionType;
 import com.microsoft.azure.functions.ExecutionContext;
-import com.microsoft.azure.functions.OutputBinding;
 import com.microsoft.azure.functions.annotation.BindingName;
 import com.microsoft.azure.functions.annotation.Cardinality;
-import com.microsoft.azure.functions.annotation.CosmosDBOutput;
 import com.microsoft.azure.functions.annotation.EventHubTrigger;
 import com.microsoft.azure.functions.annotation.FunctionName;
 import it.gov.pagopa.nodoretodatastore.util.ObjectMapperUtils;
-import lombok.NonNull;
 
 import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
-import java.time.ZonedDateTime;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.logging.Logger;
@@ -33,46 +36,39 @@ public class NodoReEventToDataStore {
 
 	private Pattern replaceDashPattern = Pattern.compile("-([a-zA-Z])");
 	private static String NA = "NA";
-	private static String idField = "uniqueId";
-//	private static String tableName = System.getenv("TABLE_STORAGE_TABLE_NAME");
-	private static String insertedTimestamp = "insertedTimestamp";
-	private static String insertedDate = "insertedDate";
-	private static String partitionKey = "PartitionKey";
+	private static String uniqueIdField = "uniqueId";
+	private static String insertedDateField = "insertedDate";
+	private static String insertedTimestampField = "insertedTimestamp";
+	private static String partitionKeyField = "PartitionKey";
 	private static String payloadField = "payload";
+	private static String idDominioField = "idDominio";
 
-//	private static MongoClient mongoClient = null;
+	private static TableServiceClient tableServiceClient = null;
 
-//	private static TableServiceClient tableServiceClient = null;
+	private static String tableName = System.getenv("TABLE_STORAGE_TABLE_NAME");
 
-//	private static MongoClient getMongoClient(){
-//		if(mongoClient==null){
-//			mongoClient = new MongoClient(new MongoClientURI(System.getenv("COSMOS_CONN_STRING")));
-//		}
-//		return mongoClient;
-//	}
+	private static TableServiceClient getTableServiceClient(){
+		if(tableServiceClient==null) {
+			tableServiceClient = new TableServiceClientBuilder().connectionString(System.getenv("TABLE_STORAGE_CONN_STRING"))
+					.buildClient();
+			tableServiceClient.createTableIfNotExists(tableName);
+		}
+		return tableServiceClient;
+	}
 
-//	private static TableServiceClient getTableServiceClient(){
-//		if(tableServiceClient==null){
-//			tableServiceClient = new TableServiceClientBuilder().connectionString(System.getenv("TABLE_STORAGE_CONN_STRING"))
-//					.buildClient();
-//			tableServiceClient.createTableIfNotExists(tableName);
-//		}
-//		return tableServiceClient;
-//	}
-
-
-//	private void addToBatch(Logger logger, Map<String,List<TableTransactionAction>> partitionEvents, Map<String,Object> reEvent){
-//		if(reEvent.get(idField) == null) {
-//			logger.warning("event has no '" + idField + "' field");
-//		} else {
-//			TableEntity entity = new TableEntity((String) reEvent.get(partitionKey), (String)reEvent.get(idField));
-//			entity.setProperties(reEvent);
-//			if(!partitionEvents.containsKey(entity.getPartitionKey())){
-//				partitionEvents.put(entity.getPartitionKey(),new ArrayList<TableTransactionAction>());
-//			}
-//			partitionEvents.get(entity.getPartitionKey()).add(new TableTransactionAction(TableTransactionActionType.UPSERT_REPLACE,entity));
-//		}
-//	}
+	private void addToBatch(Logger logger, Map<String,List<TableTransactionAction>> partitionEvents, Map<String, Object> reEvent) {
+		if(reEvent.get(uniqueIdField) == null) {
+			logger.warning("event has no '" + uniqueIdField + "' field");
+		}
+		else {
+			TableEntity entity = new TableEntity((String) reEvent.get(partitionKeyField), (String)reEvent.get(uniqueIdField));
+			entity.setProperties(reEvent);
+			if(!partitionEvents.containsKey(entity.getPartitionKey())){
+				partitionEvents.put(entity.getPartitionKey(),new ArrayList<TableTransactionAction>());
+			}
+			partitionEvents.get(entity.getPartitionKey()).add(new TableTransactionAction(TableTransactionActionType.UPSERT_REPLACE,entity));
+		}
+	}
 
 	private String replaceDashWithUppercase(String input) {
 		if(!input.contains("-")){
@@ -89,8 +85,8 @@ public class NodoReEventToDataStore {
 		return sb.toString();
 	}
 
-	private void zipPayload(Logger logger,Map<String,Object> reEvent) {
-		if(reEvent.get(payloadField)!=null){
+	private void zipPayload(Logger logger, Map<String,Object> reEvent) {
+		if(reEvent.get(payloadField)!=null) {
 			try {
 				byte[] data = ((String)reEvent.get(payloadField)).getBytes(StandardCharsets.UTF_8);
 				ByteArrayOutputStream baos = new ByteArrayOutputStream();
@@ -105,6 +101,11 @@ public class NodoReEventToDataStore {
 		}
 	}
 
+	private Map<String,Object> getEvent(String partitionKeyValue, Map<String,Object> reEvent) {
+		reEvent.put(partitionKeyField, partitionKeyValue);
+		return reEvent;
+	}
+
     @FunctionName("EventHubNodoReEventProcessor")
     public void processNodoReEvent (
             @EventHubTrigger(
@@ -114,63 +115,43 @@ public class NodoReEventToDataStore {
                     cardinality = Cardinality.MANY)
     		List<String> reEvents,
     		@BindingName(value = "PropertiesArray") Map<String, Object>[] properties,
-			@CosmosDBOutput(
-					name = "NodoReEventToDataStore",
-					databaseName = "nodo_re",
-					containerName = "events",
-					createIfNotExists = false,
-					connection = "COSMOS_CONN_STRING")
-			@NonNull OutputBinding<List<Object>> documentdb,
             final ExecutionContext context) {
 
 		Logger logger = context.getLogger();
 
-//		TableClient tableClient = getTableServiceClient().getTableClient(tableName);
-		String msg = String.format("Persisting %d events", reEvents.size());
-		logger.info(msg);
+		TableClient tableClient = getTableServiceClient().getTableClient(tableName);
+
+		logger.info(String.format("Persisting %d events", reEvents.size()));
         try {
         	if (reEvents.size() == properties.length) {
-//				Map<String,List<TableTransactionAction>> partitionEvents = new HashMap<>();
-				List<Object> eventsToPersistCosmos = new ArrayList<>();
+				Map<String,List<TableTransactionAction>> partitionEvents = new HashMap<>();
 
 				for(int index=0; index< properties.length; index++) {
-					// logger.info("processing "+(index+1)+" of "+properties.length);
 					final Map<String,Object> reEvent = ObjectMapperUtils.readValue(reEvents.get(index), Map.class);
 					properties[index].forEach((p,v) -> {
 						String s = replaceDashWithUppercase(p);
 						reEvent.put(s, v);
 					});
 
-					reEvent.put("id", reEvent.get("uniqueId"));
+					String insertedDateValue = reEvent.get(insertedTimestampField) != null ? ((String)reEvent.get(insertedTimestampField)).substring(0, 10) : NA;
+					reEvent.put(insertedDateField, insertedDateValue);
 
-					String insertedDateValue = reEvent.get(insertedTimestamp) != null ? ((String)reEvent.get(insertedTimestamp)).substring(0, 10) : NA;
-					reEvent.put(insertedDate, insertedDateValue);
+					zipPayload(logger, reEvent);
 
-					String idDominio = reEvent.get("idDominio") != null ? reEvent.get("idDominio").toString() : NA;
-					String idPsp = reEvent.get("psp") != null ? reEvent.get("psp").toString() : NA;
-					String partitionKeyValue = insertedDateValue + "-" + idDominio + "-" + idPsp;
-					reEvent.put(partitionKey, partitionKeyValue);
+					String idDominio = reEvent.get(idDominioField) != null ? reEvent.get(idDominioField).toString() : NA;
 
-//					zipPayload(logger,reEvent);
-					reEvent.put(payloadField, null);
-
-//					addToBatch(logger,partitionEvents,reEvent);
-					eventsToPersistCosmos.add(reEvent);
+					addToBatch(logger, partitionEvents, getEvent(insertedDateValue, reEvent));
+					addToBatch(logger, partitionEvents, getEvent(insertedDateValue + "-" + idDominio, reEvent));
 				}
 
-//				partitionEvents.forEach((pe,values)->{
-//					try {
-//						tableClient.submitTransaction(values);
-//					} catch (Throwable t){
-//						logger.severe("Could not save on tableStorage,partition "+pe+", "+values.size()+" rows,error:"+ t.toString());
-//					}
-//				});
-
-				try {
-					documentdb.setValue(eventsToPersistCosmos);
-				} catch (Throwable t){
-					logger.severe("Could not save on cosmos "+eventsToPersistCosmos.size()+", error:"+ t.toString());
-				}
+				// save batch by partition keys
+				partitionEvents.forEach((pe, values)->{
+					try {
+						tableClient.submitTransaction(values);
+					} catch (Throwable t){
+						logger.severe("Could not save on tableStorage,partition "+pe+", "+values.size()+" rows,error:"+ t.toString());
+					}
+				});
 
 				logger.info("Done processing events");
             } else {
@@ -179,8 +160,7 @@ public class NodoReEventToDataStore {
         } catch (NullPointerException e) {
             logger.severe("NullPointerException exception on cosmos nodo-re-events msg ingestion at "+ LocalDateTime.now()+ " : " + e.getMessage());
         } catch (Throwable e) {
-            logger.severe("Generic exception on cosmos nodo-re-events msg ingestion at "+ LocalDateTime.now()+ " : " + e.getMessage());
+            logger.severe("Generic exception on table storage nodo-re-events msg ingestion at "+ LocalDateTime.now()+ " : " + e.getMessage());
         }
-
     }
 }

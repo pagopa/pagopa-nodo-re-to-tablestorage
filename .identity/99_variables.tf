@@ -1,7 +1,7 @@
 locals {
   github = {
     org        = "pagopa"
-    repository = "pagopa-nodo-re-to-datastore"
+    repository = "pagopa-nodo-re-to-tablestorage"
   }
 
   prefix         = "pagopa"

@@ -18,7 +18,7 @@ on:
   workflow_dispatch:
 
 env:
-  PROJECT_KEY: pagopa_pagopa-nodo-re-to-datastore
+  PROJECT_KEY: pagopa_pagopa-nodo-re-to-tablestorage
 
 
 permissions:
