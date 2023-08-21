@@ -57,16 +57,16 @@ public class NodoReEventToDataStore {
 	}
 
 	private void addToBatch(Logger logger, Map<String,List<TableTransactionAction>> partitionEvents, Map<String, Object> reEvent) {
-		if(reEvent.get(uniqueIdField) == null) {
-			logger.warning(String.format("event has no '%s' field", uniqueIdField));
-		}
-		else {
+		if(reEvent.get(uniqueIdField) != null) {
 			TableEntity entity = new TableEntity((String) reEvent.get(partitionKeyField), (String)reEvent.get(uniqueIdField));
 			entity.setProperties(reEvent);
 			if(!partitionEvents.containsKey(entity.getPartitionKey())){
 				partitionEvents.put(entity.getPartitionKey(),new ArrayList<>());
 			}
 			partitionEvents.get(entity.getPartitionKey()).add(new TableTransactionAction(TableTransactionActionType.UPSERT_REPLACE,entity));
+		}
+		else {
+			logger.warning(String.format("event has no '%s' field", uniqueIdField));
 		}
 	}
 
@@ -122,8 +122,9 @@ public class NodoReEventToDataStore {
 		TableClient tableClient = getTableServiceClient().getTableClient(tableName);
 
 		try {
-			logger.info(String.format("Persisting %d events", reEvents.size()));
-        	if (reEvents.size() == properties.length) {
+			if (reEvents.size() == properties.length) {
+				logger.info(String.format("Persisting %d events", reEvents.size()));
+
 				Map<String,List<TableTransactionAction>> partitionEvents = new HashMap<>();
 
 				for(int index=0; index< properties.length; index++) {
@@ -148,7 +149,7 @@ public class NodoReEventToDataStore {
 				partitionEvents.forEach((pe, values) -> {
 					try {
 						tableClient.submitTransaction(values);
-					} catch (Throwable t) {
+					} catch (Exception t) {
 						logger.severe("Could not save on tableStorage,partition "+pe+", "+values.size()+" rows,error:"+ t.toString());
 					}
 				});
@@ -159,7 +160,7 @@ public class NodoReEventToDataStore {
             }
         } catch (NullPointerException e) {
             logger.severe("NullPointerException exception on cosmos nodo-re-events msg ingestion at "+ LocalDateTime.now()+ " : " + e.getMessage());
-        } catch (Throwable e) {
+        } catch (Exception e) {
             logger.severe("Generic exception on table storage nodo-re-events msg ingestion at "+ LocalDateTime.now()+ " : " + e.getMessage());
         }
     }
