@@ -65,9 +65,6 @@ public class NodoReEventToDataStore {
 			}
 			partitionEvents.get(entity.getPartitionKey()).add(new TableTransactionAction(TableTransactionActionType.UPSERT_REPLACE,entity));
 		}
-		else {
-			logger.warning(String.format("event has no '%s' field", uniqueIdField));
-		}
 	}
 
 	private String replaceDashWithUppercase(String input) {
@@ -123,8 +120,6 @@ public class NodoReEventToDataStore {
 
 		try {
 			if (reEvents.size() == properties.length) {
-				logger.info(String.format("Persisting %d events", reEvents.size()));
-
 				Map<String,List<TableTransactionAction>> partitionEvents = new HashMap<>();
 
 				for(int index=0; index< properties.length; index++) {
@@ -154,9 +149,7 @@ public class NodoReEventToDataStore {
 					}
 				});
 
-				logger.info("Done processing events");
-            } else {
-				logger.severe("Error processing events, lengths do not match ["+reEvents.size()+","+properties.length+"]");
+				logger.info("Done processing events: " + reEvents.size());
             }
         } catch (NullPointerException e) {
             logger.severe("NullPointerException exception on cosmos nodo-re-events msg ingestion at "+ LocalDateTime.now()+ " : " + e.getMessage());
