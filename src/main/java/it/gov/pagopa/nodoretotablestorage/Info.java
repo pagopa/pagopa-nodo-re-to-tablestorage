@@ -1,4 +1,4 @@
-package it.gov.pagopa.nodoretodatastore;
+package it.gov.pagopa.nodoretotablestorage;
 
 import com.microsoft.azure.functions.ExecutionContext;
 import com.microsoft.azure.functions.HttpMethod;

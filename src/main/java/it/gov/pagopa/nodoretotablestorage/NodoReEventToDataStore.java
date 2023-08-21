@@ -35,7 +35,7 @@ public class NodoReEventToDataStore {
      */
 
 	private Pattern replaceDashPattern = Pattern.compile("-([a-zA-Z])");
-	private static String NA = "NA";
+	private static String na = "NA";
 	private static String uniqueIdField = "uniqueId";
 	private static String insertedDateField = "insertedDate";
 	private static String insertedTimestampField = "insertedTimestamp";
@@ -58,13 +58,13 @@ public class NodoReEventToDataStore {
 
 	private void addToBatch(Logger logger, Map<String,List<TableTransactionAction>> partitionEvents, Map<String, Object> reEvent) {
 		if(reEvent.get(uniqueIdField) == null) {
-			logger.warning("event has no '" + uniqueIdField + "' field");
+			logger.warning(String.format("event has no '%s' field", uniqueIdField));
 		}
 		else {
 			TableEntity entity = new TableEntity((String) reEvent.get(partitionKeyField), (String)reEvent.get(uniqueIdField));
 			entity.setProperties(reEvent);
 			if(!partitionEvents.containsKey(entity.getPartitionKey())){
-				partitionEvents.put(entity.getPartitionKey(),new ArrayList<TableTransactionAction>());
+				partitionEvents.put(entity.getPartitionKey(),new ArrayList<>());
 			}
 			partitionEvents.get(entity.getPartitionKey()).add(new TableTransactionAction(TableTransactionActionType.UPSERT_REPLACE,entity));
 		}
@@ -133,12 +133,12 @@ public class NodoReEventToDataStore {
 						reEvent.put(s, v);
 					});
 
-					String insertedDateValue = reEvent.get(insertedTimestampField) != null ? ((String)reEvent.get(insertedTimestampField)).substring(0, 10) : NA;
+					String insertedDateValue = reEvent.get(insertedTimestampField) != null ? ((String)reEvent.get(insertedTimestampField)).substring(0, 10) : na;
 					reEvent.put(insertedDateField, insertedDateValue);
 
 					zipPayload(logger, reEvent);
 
-					String idDominio = reEvent.get(idDominioField) != null ? reEvent.get(idDominioField).toString() : NA;
+					String idDominio = reEvent.get(idDominioField) != null ? reEvent.get(idDominioField).toString() : na;
 
 					addToBatch(logger, partitionEvents, getEvent(insertedDateValue, reEvent));
 					addToBatch(logger, partitionEvents, getEvent(insertedDateValue + "-" + idDominio, reEvent));
