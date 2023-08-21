@@ -1,4 +1,4 @@
-package it.gov.pagopa.nodoretodatastore.util;
+package it.gov.pagopa.nodoretotablestorage.util;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;

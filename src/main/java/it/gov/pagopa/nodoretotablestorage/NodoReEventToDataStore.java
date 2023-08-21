@@ -11,7 +11,7 @@ import com.microsoft.azure.functions.annotation.BindingName;
 import com.microsoft.azure.functions.annotation.Cardinality;
 import com.microsoft.azure.functions.annotation.EventHubTrigger;
 import com.microsoft.azure.functions.annotation.FunctionName;
-import it.gov.pagopa.nodoretodatastore.util.ObjectMapperUtils;
+import it.gov.pagopa.nodoretotablestorage.util.ObjectMapperUtils;
 
 import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
@@ -35,7 +35,7 @@ public class NodoReEventToDataStore {
      */
 
 	private Pattern replaceDashPattern = Pattern.compile("-([a-zA-Z])");
-	private static String NA = "NA";
+	private static String na = "NA";
 	private static String uniqueIdField = "uniqueId";
 	private static String insertedDateField = "insertedDate";
 	private static String insertedTimestampField = "insertedTimestamp";
@@ -56,22 +56,19 @@ public class NodoReEventToDataStore {
 		return tableServiceClient;
 	}
 
-	private void addToBatch(Logger logger, Map<String,List<TableTransactionAction>> partitionEvents, Map<String, Object> reEvent) {
-		if(reEvent.get(uniqueIdField) == null) {
-			logger.warning("event has no '" + uniqueIdField + "' field");
-		}
-		else {
+	private void addToBatch(Map<String,List<TableTransactionAction>> partitionEvents, Map<String, Object> reEvent) {
+		if(reEvent.get(uniqueIdField) != null) {
 			TableEntity entity = new TableEntity((String) reEvent.get(partitionKeyField), (String)reEvent.get(uniqueIdField));
 			entity.setProperties(reEvent);
 			if(!partitionEvents.containsKey(entity.getPartitionKey())){
-				partitionEvents.put(entity.getPartitionKey(),new ArrayList<TableTransactionAction>());
+				partitionEvents.put(entity.getPartitionKey(),new ArrayList<>());
 			}
 			partitionEvents.get(entity.getPartitionKey()).add(new TableTransactionAction(TableTransactionActionType.UPSERT_REPLACE,entity));
 		}
 	}
 
 	private String replaceDashWithUppercase(String input) {
-		if(!input.contains("-")){
+		if(!input.contains("-")) {
 			return input;
 		}
 		Matcher matcher = replaceDashPattern.matcher(input);
@@ -121,9 +118,8 @@ public class NodoReEventToDataStore {
 
 		TableClient tableClient = getTableServiceClient().getTableClient(tableName);
 
-		logger.info(String.format("Persisting %d events", reEvents.size()));
-        try {
-        	if (reEvents.size() == properties.length) {
+		try {
+			if (reEvents.size() == properties.length) {
 				Map<String,List<TableTransactionAction>> partitionEvents = new HashMap<>();
 
 				for(int index=0; index< properties.length; index++) {
@@ -133,33 +129,31 @@ public class NodoReEventToDataStore {
 						reEvent.put(s, v);
 					});
 
-					String insertedDateValue = reEvent.get(insertedTimestampField) != null ? ((String)reEvent.get(insertedTimestampField)).substring(0, 10) : NA;
+					String insertedDateValue = reEvent.get(insertedTimestampField) != null ? ((String)reEvent.get(insertedTimestampField)).substring(0, 10) : na;
 					reEvent.put(insertedDateField, insertedDateValue);
 
 					zipPayload(logger, reEvent);
 
-					String idDominio = reEvent.get(idDominioField) != null ? reEvent.get(idDominioField).toString() : NA;
+					String idDominio = reEvent.get(idDominioField) != null ? reEvent.get(idDominioField).toString() : na;
 
-					addToBatch(logger, partitionEvents, getEvent(insertedDateValue, reEvent));
-					addToBatch(logger, partitionEvents, getEvent(insertedDateValue + "-" + idDominio, reEvent));
+					addToBatch(partitionEvents, getEvent(insertedDateValue, reEvent));
+					addToBatch(partitionEvents, getEvent(insertedDateValue + "-" + idDominio, reEvent));
 				}
 
 				// save batch by partition keys
-				partitionEvents.forEach((pe, values)->{
+				partitionEvents.forEach((pe, values) -> {
 					try {
 						tableClient.submitTransaction(values);
-					} catch (Throwable t){
+					} catch (Exception t) {
 						logger.severe("Could not save on tableStorage,partition "+pe+", "+values.size()+" rows,error:"+ t.toString());
 					}
 				});
 
 				logger.info("Done processing events");
-            } else {
-				logger.severe("Error processing events, lengths do not match ["+reEvents.size()+","+properties.length+"]");
             }
         } catch (NullPointerException e) {
             logger.severe("NullPointerException exception on cosmos nodo-re-events msg ingestion at "+ LocalDateTime.now()+ " : " + e.getMessage());
-        } catch (Throwable e) {
+        } catch (Exception e) {
             logger.severe("Generic exception on table storage nodo-re-events msg ingestion at "+ LocalDateTime.now()+ " : " + e.getMessage());
         }
     }
