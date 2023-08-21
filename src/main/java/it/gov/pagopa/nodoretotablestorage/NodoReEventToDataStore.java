@@ -11,7 +11,7 @@ import com.microsoft.azure.functions.annotation.BindingName;
 import com.microsoft.azure.functions.annotation.Cardinality;
 import com.microsoft.azure.functions.annotation.EventHubTrigger;
 import com.microsoft.azure.functions.annotation.FunctionName;
-import it.gov.pagopa.nodoretodatastore.util.ObjectMapperUtils;
+import it.gov.pagopa.nodoretotablestorage.util.ObjectMapperUtils;
 
 import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
@@ -71,7 +71,7 @@ public class NodoReEventToDataStore {
 	}
 
 	private String replaceDashWithUppercase(String input) {
-		if(!input.contains("-")){
+		if(!input.contains("-")) {
 			return input;
 		}
 		Matcher matcher = replaceDashPattern.matcher(input);
@@ -121,8 +121,8 @@ public class NodoReEventToDataStore {
 
 		TableClient tableClient = getTableServiceClient().getTableClient(tableName);
 
-		logger.info(String.format("Persisting %d events", reEvents.size()));
-        try {
+		try {
+			logger.info(String.format("Persisting %d events", reEvents.size()));
         	if (reEvents.size() == properties.length) {
 				Map<String,List<TableTransactionAction>> partitionEvents = new HashMap<>();
 
@@ -145,10 +145,10 @@ public class NodoReEventToDataStore {
 				}
 
 				// save batch by partition keys
-				partitionEvents.forEach((pe, values)->{
+				partitionEvents.forEach((pe, values) -> {
 					try {
 						tableClient.submitTransaction(values);
-					} catch (Throwable t){
+					} catch (Throwable t) {
 						logger.severe("Could not save on tableStorage,partition "+pe+", "+values.size()+" rows,error:"+ t.toString());
 					}
 				});
