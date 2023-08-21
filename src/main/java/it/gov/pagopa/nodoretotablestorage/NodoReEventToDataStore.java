@@ -56,7 +56,7 @@ public class NodoReEventToDataStore {
 		return tableServiceClient;
 	}
 
-	private void addToBatch(Logger logger, Map<String,List<TableTransactionAction>> partitionEvents, Map<String, Object> reEvent) {
+	private void addToBatch(Map<String,List<TableTransactionAction>> partitionEvents, Map<String, Object> reEvent) {
 		if(reEvent.get(uniqueIdField) != null) {
 			TableEntity entity = new TableEntity((String) reEvent.get(partitionKeyField), (String)reEvent.get(uniqueIdField));
 			entity.setProperties(reEvent);
@@ -136,8 +136,8 @@ public class NodoReEventToDataStore {
 
 					String idDominio = reEvent.get(idDominioField) != null ? reEvent.get(idDominioField).toString() : na;
 
-					addToBatch(logger, partitionEvents, getEvent(insertedDateValue, reEvent));
-					addToBatch(logger, partitionEvents, getEvent(insertedDateValue + "-" + idDominio, reEvent));
+					addToBatch(partitionEvents, getEvent(insertedDateValue, reEvent));
+					addToBatch(partitionEvents, getEvent(insertedDateValue + "-" + idDominio, reEvent));
 				}
 
 				// save batch by partition keys
@@ -149,7 +149,7 @@ public class NodoReEventToDataStore {
 					}
 				});
 
-				logger.info("Done processing events: " + reEvents.size());
+				logger.info("Done processing events");
             }
         } catch (NullPointerException e) {
             logger.severe("NullPointerException exception on cosmos nodo-re-events msg ingestion at "+ LocalDateTime.now()+ " : " + e.getMessage());
