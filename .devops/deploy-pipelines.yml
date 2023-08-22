@@ -149,6 +149,17 @@ stages:
     jobs:
       - job: deployJava
         steps:
+          - task: AzureCLI@2
+            displayName: Start staging slot [PROD]
+            condition: eq('${{ parameters.ENV }}', 'prod')
+            inputs:
+              azureSubscription: $(AZURE_SUBSCRIPTION)
+              addSpnToEnvironment: true
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              failOnStandardError: true
+              inlineScript: |
+                az functionapp start --name ${{variables.APP_NAME}}-nodo-re-ts-fn --resource-group $(RESOURCE_GROUP) --slot staging
           # deploy fn
           - task: AzureFunctionAppContainer@1
             displayName: Deploy Function App [DEV|UAT]
@@ -203,3 +214,15 @@ stages:
               SourceSlot: staging
               SwapWithProduction: true
               Slot: production
+          # to prevent staging invocation
+          - task: AzureCLI@2
+            displayName: Stop staging slot [PROD]
+            condition: eq('${{ parameters.ENV }}', 'prod')
+            inputs:
+              azureSubscription: $(AZURE_SUBSCRIPTION)
+              addSpnToEnvironment: true
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              failOnStandardError: true
+              inlineScript: |
+                az functionapp stop --name ${{variables.APP_NAME}}-nodo-re-ts-fn --resource-group $(RESOURCE_GROUP) --slot staging
