@@ -6,9 +6,9 @@
   },
   "extensions": {
     "eventHubs": {
-      "maxEventBatchSize" : 10,
-      "batchCheckpointFrequency" : 2,
-      "prefetchCount" : 100,
+      "maxEventBatchSize" : 256,
+      "batchCheckpointFrequency" : 5,
+      "prefetchCount" : 500,
       "initialOffsetOptions" : {
         "type" : "fromStart"
       },
@@ -29,10 +29,10 @@
     },
     "fileLoggingMode": "always",
     "logLevel": {
-      "default": "Debug",
-      "Host.Results": "Information",
-      "Function": "Error",
-      "Function.EventHubNodoReEventProcessor": "Debug",
+      "default": "Information",
+      "Host.Results": "Error",
+      "Function": "Information",
+      "Function.EventHubNodoReEventProcessor": "Error",
       "Host.Aggregator": "Trace"
     }
   }
