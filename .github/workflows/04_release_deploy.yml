@@ -1,10 +1,8 @@
-name: Release And Deploy
+name: Release And Deploy Azure Function
 
 # Controls when the workflow will run
 on:
   pull_request:
-    branches:
-      - main
     types: [ closed ]
 
   # Allows you to run this workflow manually from the Actions tab
@@ -33,22 +31,7 @@ on:
       beta:
         required: false
         type: boolean
-        description: deploy beta version
-        default: false
-
-  workflow_call:
-    inputs:
-      environment:
-        required: true
-        type: string
-      semver:
-        required: true
-        type: string
-        default: skip
-      beta:
-        required: false
-        type: boolean
-        description: deploy beta version
+        description: Deploy function on Azure in beta version
         default: false
 
 permissions:
@@ -58,6 +41,8 @@ permissions:
   id-token: write
   actions: read
 
+env:
+  ENV_SHORT: ${{ (contains(github.event.inputs.environment,'dev') && 'd') || (contains(github.event.inputs.environment, 'uat') && 'u') || (contains(github.event.inputs.environment,'prod') && 'p') }}
 
 # A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
@@ -89,7 +74,6 @@ jobs:
         run: |
           echo "environment=${{env.ENVIRNOMENT}}" >> $GITHUB_OUTPUT
 
-
   release:
     name: Create a New Release
     runs-on: ubuntu-latest
@@ -106,47 +90,106 @@ jobs:
           beta: ${{ inputs.beta }}
           skip_ci: ${{ inputs.beta }}
 
-  image:
+  build-and-push:
     needs: [ setup, release ]
     name: Build and Push Docker Image
     runs-on: ubuntu-latest
     if: ${{ inputs.semver != 'skip' }}
+    environment: ${{ inputs.environment }}
     steps:
       - name: Build and Push
         id: semver
-        uses: pagopa/github-actions-template/ghcr-build-push@v1.4.1
+        uses: pagopa/github-actions-template/ghcr-build-push@v1.5.4
         with:
+          branch: ${{ github.ref_name}}
           github_token: ${{ secrets.GITHUB_TOKEN }}
           tag: ${{ needs.release.outputs.version }}
 
-  deploy:
-    name: Deploy AZ Functions
-    needs: [ setup, release, image ]
+  deploy_azure_fn:
+    name: Deploy Azure function
+    environment: ${{ inputs.environment }}
+    needs: [ setup, release, build-and-push ]
+    runs-on: ubuntu-latest
     if: ${{ always() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') }}
-    strategy:
-      matrix:
-        environment: [ dev, uat, prod ]
-    uses: ./.github/workflows/self_hosted.yml
-    with:
-      target: ${{ matrix.environment }}
-      environment: ${{ needs.setup.outputs.environment }}
-    secrets: inherit
 
-#  notify:
-#    needs: [ deploy ]
-#    runs-on: ubuntu-latest
-#    name: Notify
-#    if: always()
-#    steps:
-#      - name: Report Status
-#        if: always()
-#        uses: ravsamhq/notify-slack-action@v2
-#        with:
-#          status: ${{ needs.deploy.result }}
-#          token: ${{ secrets.GITHUB_TOKEN }}
-#          notify_when: 'failure,skipped'
-#          notification_title: '{workflow} has {status_message}'
-#          message_format: '{emoji} <{workflow_url}|{workflow}> {status_message} in <{repo_url}|{repo}>'
-#          footer: 'Linked to Repo <{repo_url}|{repo}>'
-#        env:
-#          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+    steps:
+      - name: 'Checkout GitHub Action'
+        uses: actions/checkout@v3
+
+      - name: 'Login via Azure CLI'
+        uses: azure/login@v1
+        with:
+          client-id: ${{ secrets.CLIENT_ID }}
+          tenant-id: ${{ secrets.TENANT_ID }}
+          subscription-id: ${{ secrets.SUBSCRIPTION_ID }}
+
+      - name: Set env variables
+        run: |
+          echo "RESOURCE_GROUP=pagopa-${{env.ENV_SHORT}}-weu-nodo-re-to-datastore-rg" >> $GITHUB_ENV
+          echo "APP_NAME=pagopa-${{env.ENV_SHORT}}-weu-nodo-re-ts-fn" >> $GITHUB_ENV
+          echo "REGISTRY_IMAGE=ghcr.io/pagopa/pagopa-nodo-re-to-tablestorage:${{needs.release.outputs.version}}" >> $GITHUB_ENV
+
+
+      - name: 'Azure CLI script: start staging slot'
+        uses: azure/CLI@v1
+        if: ${{ contains(github.event.inputs.environment, 'prod') }}
+        with:
+          inlineScript: |
+            az functionapp start --name ${{ env.APP_NAME }} --resource-group ${{ env.RESOURCE_GROUP }} --slot staging
+
+      - name: 'Run Azure Functions Container Action: staging slot'
+        uses: Azure/functions-container-action@v1.2.1
+        if: ${{ contains(github.event.inputs.environment, 'prod')}}
+        with:
+          app-name: ${{ env.APP_NAME }}
+          image: ${{ env.REGISTRY_IMAGE }}
+          slot-name: staging
+
+      - name: 'Deploy Approval'
+        uses: trstringer/manual-approval@v1
+        if: ${{ contains(github.event.inputs.environment, 'prod')}}
+        with:
+          secret: ${{ secrets.BOT_TOKEN_GITHUB }}
+          approvers: pagopa-team-core
+          minimum-approvals: 1
+          issue-title: "Deploying ${{ env.TAG }} to prod from staging"
+          issue-body: "Please approve or deny the deployment of version ${{ env.TAG }}."
+          exclude-workflow-initiator-as-approver: false
+          timeout-minutes: 360
+
+      - name: 'Run Azure Functions Container Action'
+        uses: Azure/functions-container-action@v1.2.1
+        with:
+          app-name: ${{ env.APP_NAME }}
+          image: ${{ env.REGISTRY_IMAGE }}
+          slot-name: production
+
+      - name: 'Azure CLI script: end staging slot'
+        uses: azure/CLI@v1
+        if: ${{ contains(github.event.inputs.environment, 'prod') }}
+        with:
+          inlineScript: |
+            az functionapp stop --name ${{ env.APP_NAME }} --resource-group ${{ env.RESOURCE_GROUP }} --slot staging
+
+      - name: Azure logout
+        run: |
+          az logout
+
+##  notify:
+##    needs: [ deploy_azure_fn ]
+##    runs-on: ubuntu-latest
+##    name: Notify
+##    if: always()
+##    steps:
+##      - name: Report Status
+##        if: always()
+##        uses: ravsamhq/notify-slack-action@v2
+##        with:
+##          status: ${{ needs.deploy_azure_fn.result }}
+##          token: ${{ secrets.GITHUB_TOKEN }}
+##          notify_when: 'failure,skipped'
+##          notification_title: '{workflow} has {status_message}'
+##          message_format: '{emoji} <{workflow_url}|{workflow}> {status_message} in <{repo_url}|{repo}>'
+##          footer: 'Linked to Repo <{repo_url}|{repo}>'
+##        env:
+##          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}

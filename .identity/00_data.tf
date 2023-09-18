@@ -32,6 +32,10 @@ data "azurerm_key_vault_secret" "key_vault_bot_token" {
   key_vault_id = data.azurerm_key_vault.key_vault.id
 }
 
+data "azurerm_resource_group" "nodo_re_rg" {
+  name  = "pagopa-${var.env_short}-${local.location_short}-nodo-re-to-datastore-rg"
+}
+
 #data "azurerm_key_vault_secret" "key_vault_cucumber_token" {
 #  name         = "cucumber-token"
 #  key_vault_id = data.azurerm_key_vault.key_vault.id
