@@ -65,7 +65,6 @@ jobs:
       environment: ${{ steps.output.outputs.environment }}
       resource_group: ${{ steps.get_rg.outputs.resource_group }}
       app_name: ${{ steps.get_appname.outputs.app_name }}
-      registry_image: ${{ steps.get_image.outputs.registry_image }}
     steps:
       - name: pull request rejected
         if: github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged != true
@@ -129,15 +128,11 @@ jobs:
 
       - id: get_rg
         name: Set Resource Group
-        run: echo "resource_group=pagopa-${{env.ENV_SHORT}}-weu-nodo-re-to-datastore-rg" >> $GITHUB_ENV
+        run: echo "resource_group=pagopa-${{env.ENV_SHORT}}-weu-nodo-re-to-datastore-rg" >> $GITHUB_OUTPUT
 
       - id: get_appname
         name: Set App Name
-        run: echo "app_name=pagopa-${{env.ENV_SHORT}}-weu-nodo-re-fn" >> $GITHUB_ENV
-
-      - id: get_image
-        name: Set Registry Image
-        run: echo "registry_image=ghcr.io/pagopa/pagopa-nodo-re-to-datastore:${{needs.release.outputs.version}}" >> $GITHUB_ENV
+        run: echo "app_name=pagopa-${{env.ENV_SHORT}}-weu-nodo-re-ts-fn" >> $GITHUB_OUTPUT
 
   release:
     name: Create a New Release
@@ -160,6 +155,8 @@ jobs:
     runs-on: ubuntu-latest
     if: ${{ needs.setup.outputs.semver != 'skip' }}
     environment: ${{ needs.setup.outputs.environment }}
+    outputs:
+      registry_image: ${{ steps.get_image.outputs.registry_image }}
     steps:
       - name: Build and Push
         id: semver
@@ -168,6 +165,10 @@ jobs:
           branch: ${{ github.ref_name}}
           github_token: ${{ secrets.GITHUB_TOKEN }}
           tag: ${{ needs.release.outputs.version }}
+
+      - id: get_image
+        name: Set Registry Image
+        run: echo "registry_image=ghcr.io/pagopa/pagopa-nodo-re-to-tablestorage:${{needs.release.outputs.version}}" >> $GITHUB_OUTPUT
 
   deploy_azure_fn:
     name: Deploy Azure function
@@ -182,7 +183,7 @@ jobs:
       target: ${{ needs.setup.outputs.environment }}
       resource_group: ${{ needs.setup.outputs.resource_group }}
       app_name: ${{ needs.setup.outputs.app_name }}
-      registry_image: ${{ needs.setup.outputs.registry_image }}
+      registry_image: ${{ needs.build-and-push.outputs.registry_image }}
     secrets: inherit
 
   notify:
