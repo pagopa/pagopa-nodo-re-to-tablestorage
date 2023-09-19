@@ -50,6 +50,7 @@ jobs:
   create_staging_slot:
     name: Init staging slots
     runs-on: ubuntu-22.04
+    needs: [ setup ]
     environment:
       name: ${{ inputs.environment }}
     if: ${{ inputs.target == inputs.environment && inputs.target == 'prod' }}
@@ -71,6 +72,7 @@ jobs:
   deploy:
     name: Deploy Azure Function
     runs-on: ubuntu-22.04
+    needs: [ setup, create_staging_slot ]
     environment:
       name: ${{ inputs.environment }}
     if: ${{ inputs.target == inputs.environment }}
@@ -84,7 +86,8 @@ jobs:
 
 
   cleanup_staging_slot:
-    needs: [ create_staging_slot ]
+    name: Clean staging slots
+    needs: [ setup, create_staging_slot, deploy ]
     if: ${{ success() || failure() && (inputs.target == inputs.environment && inputs.target == 'prod') }}
     runs-on: ubuntu-22.04
     environment: ${{ inputs.environment }}
@@ -98,6 +101,8 @@ jobs:
 
 
   end_deploy:
+    name: End deploy action
+    needs: [ setup, create_staging_slot, deploy, cleanup_staging_slot ]
     if: ${{ always() && inputs.target == inputs.environment }}
     environment:
       name: ${{ inputs.environment }}
