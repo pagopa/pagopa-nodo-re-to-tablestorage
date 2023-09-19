@@ -125,17 +125,15 @@ jobs:
         run: echo "environment=${{env.ENVIRONMENT}}" >> $GITHUB_OUTPUT
 
       # Set deploy variables
-      - id: get_envshort
-        name: Set ENV_SHORT
-        run: echo "env_short=$(echo ${{needs.setup.outputs.environment}} | cut -c1-1)" >>  $GITHUB_ENV
+      - run: echo "ENV_SHORT=$(echo ${{env.ENVIRONMENT}} | cut -c1-1)" >>  $GITHUB_ENV
 
       - id: get_rg
         name: Set Resource Group
-        run: echo "resource_group=pagopa-${{env.env_short}}-weu-nodo-re-to-datastore-rg" >> $GITHUB_ENV
+        run: echo "resource_group=pagopa-${{env.ENV_SHORT}}-weu-nodo-re-to-datastore-rg" >> $GITHUB_ENV
 
       - id: get_appname
         name: Set App Name
-        run: echo "app_name=pagopa-${{env.env_short}}-weu-nodo-re-fn" >> $GITHUB_ENV
+        run: echo "app_name=pagopa-${{env.ENV_SHORT}}-weu-nodo-re-fn" >> $GITHUB_ENV
 
       - id: get_image
         name: Set Registry Image
