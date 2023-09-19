@@ -98,15 +98,3 @@ jobs:
         with:
           inlineScript: |
             az functionapp stop --name ${{ env.APP_NAME }} --resource-group ${{ env.RESOURCE_GROUP }} --slot staging
-
-
-  end_deploy:
-    name: End deploy action
-    needs: [ setup, create_staging_slot, deploy, cleanup_staging_slot ]
-    if: ${{ always() && inputs.target == inputs.environment }}
-    environment:
-      name: ${{ inputs.environment }}
-    runs-on: ubuntu-22.04
-    steps:
-      - name: Azure logout
-        run: az logout
