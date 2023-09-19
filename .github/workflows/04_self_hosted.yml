@@ -1,4 +1,4 @@
-name: Self Hosted Runner
+name: Deploy Azure function
 
 on:
   workflow_call:
@@ -12,74 +12,79 @@ on:
         description: The environment target of the job
         type: string
 
-env:
-  NAMESPACE: nodo
-  APP_NAME: pagopanodoretodatastore
-
 permissions:
   id-token: write
   contents: read
 
 jobs:
-  create_runner:
-    name: Create Runner
+  setup:
+    name: Setup
+    runs-on: ubuntu-22.04
+    steps:
+      - name: 'Checkout GitHub Action'
+        uses: actions/checkout@v3
+
+      - name: 'Login via Azure CLI'
+        uses: azure/login@v1
+        with:
+          client-id: ${{ secrets.CLIENT_ID }}
+          tenant-id: ${{ secrets.TENANT_ID }}
+          subscription-id: ${{ secrets.SUBSCRIPTION_ID }}
+
+
+  create_staging_slot:
+    name: Init staging slots
     runs-on: ubuntu-22.04
     environment:
       name: ${{ inputs.environment }}
-    if: ${{ inputs.target == inputs.environment || inputs.environment == 'all' }}
-    outputs:
-      runner_name: ${{ steps.create_github_runner.outputs.runner_name }}
+    if: ${{ inputs.target == inputs.environment && inputs.target == 'prod' }}
     steps:
-      - name: Create GitHub Runner
-        id: create_github_runner
-        # from https://github.com/pagopa/github-self-hosted-runner-azure-create-action/commits/main
-        uses: pagopa/github-self-hosted-runner-azure-create-action@v1.1.2
+      - name: 'Azure CLI script: start staging slot'
+        uses: azure/CLI@v1
         with:
-          client_id: ${{ secrets.CLIENT_ID }}
-          tenant_id: ${{ secrets.TENANT_ID }}
-          subscription_id: ${{ secrets.SUBSCRIPTION_ID }}
-          container_app_environment_name: ${{ secrets.CONTAINER_APP_ENVIRONMENT_NAME }}
-          resource_group_name: ${{ secrets.RUNNER_RESOURCE_GROUP_NAME }} # RG of the runner
-          pat_token: ${{ secrets.BOT_TOKEN_GITHUB }}
-          self_hosted_runner_image_tag: "v1.4.0"
+          inlineScript: az functionapp start --name ${{ env.APP_NAME }} --resource-group ${{ env.RESOURCE_GROUP }} --slot staging
+
+      - name: 'Run Azure Functions Container Action: staging slot'
+        uses: Azure/functions-container-action@v1.2.1
+        if: ${{ needs.setup.outputs.environment == 'prod' }}
+        with:
+          app-name: ${{ env.APP_NAME }}
+          image: ${{ env.REGISTRY_IMAGE }}
+          slot-name: staging
+
 
   deploy:
-    needs: [ create_runner ]
-    runs-on: [ self-hosted, "${{ needs.create_runner.outputs.runner_name }}" ]
-    if: ${{ inputs.target == inputs.environment || inputs.environment == 'all' }}
-    name: Deploy
-    environment: ${{ inputs.environment }}
+    name: Deploy Azure Function
+    runs-on: ubuntu-22.04
+    environment:
+      name: ${{ inputs.environment }}
+    if: ${{ inputs.target == inputs.environment }}
     steps:
-      - name: Deploy
-        uses: pagopa/github-actions-template/azure-functions-deploy@az-functions  # TODO set tag after PR merge
+      - name: 'Run Azure Functions Container Action'
+        uses: Azure/functions-container-action@v1.2.1
         with:
-          branch: ${{ github.ref_name }}
-          client_id: ${{ secrets.CLIENT_ID }}
-          subscription_id: ${{ secrets.SUBSCRIPTION_ID }}
-          tenant_id: ${{ secrets.TENANT_ID }}
-          env: ${{ inputs.environment }}
-          namespace: ${{ env.NAMESPACE }}
-          cluster_name: ${{ secrets.CLUSTER_NAME }}
-          resource_group: ${{ secrets.CLUSTER_RESOURCE_GROUP_NAME }}
-          app_name: ${{ env.APP_NAME }}
+          app-name: ${{ env.APP_NAME }}
+          image: ${{ env.REGISTRY_IMAGE }}
+          slot-name: production
 
 
-
-  cleanup_runner:
-    name: Cleanup Runner
-    needs: [ create_runner, deploy ]
-    if: ${{ success() || failure() && inputs.target == inputs.environment || inputs.environment == 'all' }}
+  cleanup_staging_slot:
+    needs: [ create_staging_slot ]
+    if: ${{ success() || failure() && (inputs.target == inputs.environment && inputs.target == 'prod') }}
     runs-on: ubuntu-22.04
     environment: ${{ inputs.environment }}
     steps:
-      - name: Cleanup GitHub Runner
-        id: cleanup_github_runner
-        # from https://github.com/pagopa/github-self-hosted-runner-azure-cleanup-action/commits/main
-        uses: pagopa/github-self-hosted-runner-azure-cleanup-action@v1.0.3
+      - name: 'Azure CLI script: end staging slot'
+        uses: azure/CLI@v1
+        if: ${{ needs.setup.outputs.environment == 'prod' }}
         with:
-          client_id: ${{ secrets.CLIENT_ID }}
-          tenant_id: ${{ secrets.TENANT_ID }}
-          subscription_id: ${{ secrets.SUBSCRIPTION_ID }}
-          resource_group_name: ${{ secrets.RUNNER_RESOURCE_GROUP_NAME }}
-          runner_name: ${{ needs.create_runner.outputs.runner_name }}
-          pat_token: ${{ secrets.BOT_TOKEN_GITHUB }}
+          inlineScript: |
+            az functionapp stop --name ${{ env.APP_NAME }} --resource-group ${{ env.RESOURCE_GROUP }} --slot staging
+
+
+  end_deploy:
+    if: ${{ always() }}
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Azure logout
+        run: az logout
