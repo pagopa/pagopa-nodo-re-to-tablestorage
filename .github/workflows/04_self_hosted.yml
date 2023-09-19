@@ -32,6 +32,9 @@ jobs:
   setup:
     name: Setup
     runs-on: ubuntu-22.04
+    if: ${{ inputs.target == inputs.environment }}
+    environment:
+      name: ${{ inputs.environment }}
     steps:
       - name: 'Checkout GitHub Action'
         uses: actions/checkout@v3
@@ -95,7 +98,9 @@ jobs:
 
 
   end_deploy:
-    if: ${{ always() }}
+    if: ${{ always() && inputs.target == inputs.environment }}
+    environment:
+      name: ${{ inputs.environment }}
     runs-on: ubuntu-22.04
     steps:
       - name: Azure logout
