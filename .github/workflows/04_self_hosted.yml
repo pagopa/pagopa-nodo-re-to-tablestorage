@@ -29,8 +29,8 @@ permissions:
   contents: read
 
 jobs:
-  setup:
-    name: Setup
+  create_staging_slot:
+    name: Create staging slots
     runs-on: ubuntu-22.04
     if: ${{ inputs.target == inputs.environment }}
     environment:
@@ -46,17 +46,9 @@ jobs:
           tenant-id: ${{ secrets.TENANT_ID }}
           subscription-id: ${{ secrets.SUBSCRIPTION_ID }}
 
-
-  create_staging_slot:
-    name: Init staging slots
-    runs-on: ubuntu-22.04
-    needs: [ setup ]
-    environment:
-      name: ${{ inputs.environment }}
-    if: ${{ inputs.target == inputs.environment && inputs.target == 'prod' }}
-    steps:
       - name: 'Azure CLI script: start staging slot'
         uses: azure/CLI@v1
+        if: ${{ needs.setup.outputs.environment == 'prod' }}
         with:
           inlineScript: az functionapp start --name ${{ env.APP_NAME }} --resource-group ${{ env.RESOURCE_GROUP }} --slot staging
 
@@ -68,11 +60,10 @@ jobs:
           image: ${{ env.REGISTRY_IMAGE }}
           slot-name: staging
 
-
   deploy:
     name: Deploy Azure Function
     runs-on: ubuntu-22.04
-    needs: [ setup, create_staging_slot ]
+    needs: [ create_staging_slot ]
     environment:
       name: ${{ inputs.environment }}
     if: ${{ inputs.target == inputs.environment }}
@@ -87,10 +78,11 @@ jobs:
 
   cleanup_staging_slot:
     name: Clean staging slots
-    needs: [ setup, create_staging_slot, deploy ]
+    needs: [ create_staging_slot, deploy ]
     if: ${{ success() || failure() && (inputs.target == inputs.environment && inputs.target == 'prod') }}
     runs-on: ubuntu-22.04
-    environment: ${{ inputs.environment }}
+    environment:
+      name: ${{ inputs.environment }}
     steps:
       - name: 'Azure CLI script: end staging slot'
         uses: azure/CLI@v1
