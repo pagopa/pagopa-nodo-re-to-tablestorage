@@ -11,6 +11,18 @@ on:
         required: true
         description: The environment target of the job
         type: string
+      resource_group:
+        required: true
+        description: ...
+        type: string
+      app_name:
+        required: true
+        description: ...
+        type: string
+      registry_image:
+        required: true
+        description: ...
+        type: string
 
 permissions:
   id-token: write
