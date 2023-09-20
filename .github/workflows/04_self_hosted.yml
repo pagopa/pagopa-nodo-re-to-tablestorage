@@ -29,78 +29,55 @@ permissions:
   contents: read
 
 jobs:
-  create_staging_slot:
+  # Starting the Azure Function's staging slot, if deploying in PROD
+  start_staging_slot:
     name: Create staging slots
     runs-on: ubuntu-22.04
-    if: ${{ inputs.target == inputs.environment }}
+    if: ${{ inputs.target == inputs.environment && inputs.target == 'prod' }}
     environment:
       name: ${{ inputs.environment }}
-    steps:
-      - name: 'Checkout GitHub Action'
-        uses: actions/checkout@v3
+    uses: pagopa/eng-github-action-iac-template/terraform-azure-function-start-staging-slot@sha # TODO CHANGE HERE
+    with:
+      branch: ${{ github.ref_name }}
+      client_id: ${{ secrets.CLIENT_ID }}
+      tenant_id: ${{ secrets.TENANT_ID }}
+      subscription_id: ${{ secrets.SUBSCRIPTION_ID }}
+      resource_group: ${{ inputs.resource_group }}
+      app_name: ${{ inputs.app_name }}
+      registry_image: ${{ inputs.registry_image }}
 
-      - name: 'Login via Azure CLI'
-        uses: azure/login@v1
-        with:
-          client-id: ${{ secrets.CLIENT_ID }}
-          tenant-id: ${{ secrets.TENANT_ID }}
-          subscription-id: ${{ secrets.SUBSCRIPTION_ID }}
 
-      - name: 'Azure CLI script: start staging slot'
-        uses: azure/CLI@v1
-        if: ${{ (inputs.target == inputs.environment && inputs.target == 'prod') }}
-        with:
-          inlineScript: az functionapp start --name ${{ inputs.app_name }} --resource-group ${{ inputs.resource_group }} --slot staging
-
-      - name: 'Run Azure Functions Container Action: staging slot'
-        uses: Azure/functions-container-action@v1.2.1
-        if: ${{ (inputs.target == inputs.environment && inputs.target == 'prod') }}
-        with:
-          app-name: ${{ inputs.app_name }}
-          image: ${{ inputs.registry_image }}
-          slot-name: staging
-
+  # Executing the deploy of the Azure function with the new image
   deploy:
     name: Deploy Azure Function
     runs-on: ubuntu-22.04
     needs: [ create_staging_slot ]
     environment:
       name: ${{ inputs.environment }}
-    if: ${{ inputs.target == inputs.environment }}
-    steps:
-      - name: 'Login via Azure CLI'
-        uses: azure/login@v1
-        with:
-          client-id: ${{ secrets.CLIENT_ID }}
-          tenant-id: ${{ secrets.TENANT_ID }}
-          subscription-id: ${{ secrets.SUBSCRIPTION_ID }}
-
-      - name: 'Run Azure Functions Container Action'
-        uses: Azure/functions-container-action@v1.2.1
-        with:
-          app-name: ${{ inputs.app_name }}
-          image: ${{ inputs.registry_image }}
-          slot-name: production
+    uses: pagopa/github-actions-template/azure-function-deploy@sha # TODO CHANGE HERE
+    with:
+      branch: ${{ github.ref_name }}
+      client_id: ${{ secrets.CLIENT_ID }}
+      tenant_id: ${{ secrets.TENANT_ID }}
+      subscription_id: ${{ secrets.SUBSCRIPTION_ID }}
+      app_name: ${{ inputs.app_name }}
+      registry_image: ${{ inputs.registry_image }}
 
 
-  cleanup_staging_slot:
+  # Stopping the Azure Function's staging slot, if deploying in PROD
+  stop_staging_slot:
     name: Clean staging slots
     needs: [ create_staging_slot, deploy ]
     if: ${{ success() || failure() && (inputs.target == inputs.environment && inputs.target == 'prod') }}
     runs-on: ubuntu-22.04
     environment:
       name: ${{ inputs.environment }}
-    steps:
-      - name: 'Login via Azure CLI'
-        uses: azure/login@v1
-        with:
-          client-id: ${{ secrets.CLIENT_ID }}
-          tenant-id: ${{ secrets.TENANT_ID }}
-          subscription-id: ${{ secrets.SUBSCRIPTION_ID }}
-
-      - name: 'Azure CLI script: end staging slot'
-        uses: azure/CLI@v1
-        if: ${{ (inputs.target == inputs.environment && inputs.target == 'prod') }}
-        with:
-          inlineScript: |
-            az functionapp stop --name ${{ inputs.app_name }} --resource-group ${{ inputs.resource_group }} --slot staging
+    uses: pagopa/eng-github-action-iac-template/terraform-azure-function-stop-staging-slot@sha # TODO CHANGE HERE
+    with:
+      branch: ${{ github.ref_name }}
+      client_id: ${{ secrets.CLIENT_ID }}
+      tenant_id: ${{ secrets.TENANT_ID }}
+      subscription_id: ${{ secrets.SUBSCRIPTION_ID }}
+      resource_group: ${{ inputs.resource_group }}
+      app_name: ${{ inputs.app_name }}
+      registry_image: ${{ inputs.registry_image }}

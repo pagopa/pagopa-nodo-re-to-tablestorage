@@ -29,14 +29,6 @@ on:
           - patch
           - new_release
           - breaking_change
-          # promote (skip)
-          # patch (patch)
-          # new_release (minor)
-          # breaking_change (major)
-
-          # if DEV  -> skip, patch, new-release (minor) or breaking-change (major)
-          # if UAT  -> promote or patch (patch + branch_name)
-          # if PROD -> promote or patch (patch + branch_name)
 
   workflow_call:
     inputs:
@@ -61,70 +53,17 @@ jobs:
     name: Setup
     runs-on: ubuntu-latest
     outputs:
-      semver: ${{ steps.get_semver.outputs.semver }}
-      environment: ${{ steps.output.outputs.environment }}
+      semver: ${{ steps.semver_setup.outputs.semver }}
+      environment: ${{ steps.semver_setup.outputs.environment }}
       resource_group: ${{ steps.get_rg.outputs.resource_group }}
       app_name: ${{ steps.get_appname.outputs.app_name }}
     steps:
-      - name: pull request rejected
-        if: github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged != true
-        run: |
-          echo "❌ PR was closed without a merge"
-          exit 1
-
-      # Set Semver
-      - run: echo "SEMVER=patch" >> $GITHUB_ENV
-
-      - if: ${{ github.event.pull_request.merged && ( github.event.inputs.environment == 'uat' || github.event.inputs.environment == 'prod') && ( contains(github.event.pull_request.labels.*.name, 'breaking-change') || contains(github.event.pull_request.labels.*.name, 'new-release') || contains(github.event.pull_request.labels.*.name, 'ignore-for-release') ) }}
-        run: |
-          echo "❌ UAT and PROD accept only \"patch\" or \"promote\""
-          exit 1
-
-      - if: ${{ github.event.pull_request.merged && contains(github.event.pull_request.labels.*.name, 'ignore-for-release') }}
-        run: echo "SEMVER=skip" >> $GITHUB_ENV
-
-      - if: ${{ (github.event.pull_request.merged && contains(github.event.pull_request.labels.*.name, 'new-release')) }}
-        run: echo "SEMVER=minor" >> $GITHUB_ENV
-
-      - if: ${{ (github.event.pull_request.merged && contains(github.event.pull_request.labels.*.name, 'breaking-change')) }}
-        run: echo "SEMVER=major" >> $GITHUB_ENV
-
-      # force semver if dev, !=main or skip release
-      - if: ${{ inputs.semver == 'new_release' }}
-        run: echo "SEMVER=minor" >> $GITHUB_ENV
-
-      - if: ${{ inputs.semver == 'breaking_change' }}
-        run: echo "SEMVER=major" >> $GITHUB_ENV
-
-      - if: ${{ github.ref_name != 'main' && inputs.semver == '' }}
-        run: echo "SEMVER=buildNumber" >> $GITHUB_ENV
-
-      - if: ${{ inputs.semver == 'promote' || inputs.semver == 'skip' }}
-        run: echo "SEMVER=skip" >> $GITHUB_ENV
-
-      - id: get_semver
-        name: Set Output
-        run: echo "semver=${{env.SEMVER}}" >> $GITHUB_OUTPUT
-
-      # Set Environment
-      - if: ${{ github.event.inputs.environment == null || github.event.inputs.environment == 'dev' }}
-        run: echo "ENVIRONMENT=dev" >> $GITHUB_ENV
-
-      - if: ${{ github.event.inputs.environment == 'uat' }}
-        run: echo "ENVIRONMENT=uat" >> $GITHUB_ENV
-
-      - if: ${{ github.event.inputs.environment == 'prod' }}
-        run: echo "ENVIRONMENT=prod" >> $GITHUB_ENV
-
-      - if: ${{ github.event.inputs.environment == 'all' }}
-        run: echo "ENVIRONMENT=all" >> $GITHUB_ENV
-
-      - id: output
-        name: Set Output
-        run: echo "environment=${{env.ENVIRONMENT}}" >> $GITHUB_OUTPUT
+      - name: Semver setup
+        id: semver_setup
+        uses: pagopa/github-actions-template/node-semver-setup@main
 
       # Set deploy variables
-      - run: echo "ENV_SHORT=$(echo ${{env.ENVIRONMENT}} | cut -c1-1)" >>  $GITHUB_ENV
+      - run: echo "ENV_SHORT=$(echo ${{steps.semver_setup.outputs.environment}} | cut -c1-1)" >>  $GITHUB_ENV
 
       - id: get_rg
         name: Set Resource Group
@@ -155,8 +94,8 @@ jobs:
         run: echo "registry_image=ghcr.io/pagopa/pagopa-nodo-re-to-tablestorage:${{steps.release.outputs.version}}" >> $GITHUB_OUTPUT
 
   build-and-push:
-    needs: [ setup, release ]
     name: Build and Push Docker Image
+    needs: [ setup, release ]
     runs-on: ubuntu-latest
     if: ${{ needs.setup.outputs.semver != 'skip' }}
     environment: ${{ needs.setup.outputs.environment }}
@@ -186,9 +125,9 @@ jobs:
     secrets: inherit
 
   notify:
+    name: Notify
     needs: [ setup, release, deploy_azure_fn ]
     runs-on: ubuntu-latest
-    name: Notify
     if: always()
     steps:
       - name: Report Status
