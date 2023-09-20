@@ -182,7 +182,7 @@ jobs:
       target: ${{ needs.setup.outputs.environment }}
       resource_group: ${{ needs.setup.outputs.resource_group }}
       app_name: ${{ needs.setup.outputs.app_name }}
-      registry_image: ${{ needs.build-and-push.outputs.registry_image }}
+      registry_image: ${{ needs.release.outputs.registry_image }}
     secrets: inherit
 
   notify:
