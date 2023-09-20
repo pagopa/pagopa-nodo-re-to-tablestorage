@@ -5,7 +5,7 @@
 
     <groupId>it.gov.pagopa</groupId>
     <artifactId>nodoretotablestorage</artifactId>
-    <version>0.1.2-2-NOD-473-migrazione-cd-su-git-hub-action-per-nodo-re-to-tablestorage</version>
+    <version>0.1.2-3-NOD-473-migrazione-cd-su-git-hub-action-per-nodo-re-to-tablestorage</version>
     <packaging>jar</packaging>
 
     <name>Nodo RE to Table Storage Fn</name>
