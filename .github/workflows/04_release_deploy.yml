@@ -152,7 +152,7 @@ jobs:
 
       - name: Set image name from container registry
         id: get_image
-        run: echo "registry_image=ghcr.io/pagopa/pagopa-nodo-re-to-tablestorage:${{env.version}}" >> $GITHUB_OUTPUT
+        run: echo "registry_image=ghcr.io/pagopa/pagopa-nodo-re-to-tablestorage:${{steps.release.outputs.version}}" >> $GITHUB_OUTPUT
 
   build-and-push:
     needs: [ setup, release ]
