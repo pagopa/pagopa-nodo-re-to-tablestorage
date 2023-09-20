@@ -91,6 +91,13 @@ jobs:
     environment:
       name: ${{ inputs.environment }}
     steps:
+      - name: 'Login via Azure CLI'
+        uses: azure/login@v1
+        with:
+          client-id: ${{ secrets.CLIENT_ID }}
+          tenant-id: ${{ secrets.TENANT_ID }}
+          subscription-id: ${{ secrets.SUBSCRIPTION_ID }}
+
       - name: 'Azure CLI script: end staging slot'
         uses: azure/CLI@v1
         if: ${{ (inputs.target == inputs.environment && inputs.target == 'prod') }}
