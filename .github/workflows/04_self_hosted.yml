@@ -48,13 +48,13 @@ jobs:
 
       - name: 'Azure CLI script: start staging slot'
         uses: azure/CLI@v1
-        if: ${{ needs.setup.outputs.environment == 'prod' }}
+        if: ${{ (inputs.target == inputs.environment && inputs.target == 'prod') }}
         with:
           inlineScript: az functionapp start --name ${{ inputs.app_name }} --resource-group ${{ inputs.resource_group }} --slot staging
 
       - name: 'Run Azure Functions Container Action: staging slot'
         uses: Azure/functions-container-action@v1.2.1
-        if: ${{ needs.setup.outputs.environment == 'prod' }}
+        if: ${{ (inputs.target == inputs.environment && inputs.target == 'prod') }}
         with:
           app-name: ${{ inputs.app_name }}
           image: ${{ inputs.registry_image }}
@@ -93,7 +93,7 @@ jobs:
     steps:
       - name: 'Azure CLI script: end staging slot'
         uses: azure/CLI@v1
-        if: ${{ needs.setup.outputs.environment == 'prod' }}
+        if: ${{ (inputs.target == inputs.environment && inputs.target == 'prod') }}
         with:
           inlineScript: |
             az functionapp stop --name ${{ inputs.app_name }} --resource-group ${{ inputs.resource_group }} --slot staging
