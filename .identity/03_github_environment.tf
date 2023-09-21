@@ -23,9 +23,7 @@ locals {
   env_secrets = {
     "CLIENT_ID" : module.github_runner_app.application_id,
     "TENANT_ID" : data.azurerm_client_config.current.tenant_id,
-    "SUBSCRIPTION_ID" : data.azurerm_subscription.current.subscription_id,
-    "ISSUER_RANGE_TABLE" : "${local.prefix}${var.env_short}${local.location_short}${local.domain}saissuerrangetable",
-#    "SUBKEY" : data.azurerm_key_vault_secret.key_vault_integration_test_subkey.value,
+    "SUBSCRIPTION_ID" : data.azurerm_subscription.current.subscription_id
   }
   env_variables = {
     "CONTAINER_APP_ENVIRONMENT_NAME" : local.container_app_environment.name,
@@ -38,7 +36,7 @@ locals {
   repo_secrets = {
     "SONAR_TOKEN" : data.azurerm_key_vault_secret.key_vault_sonar.value,
     "BOT_TOKEN_GITHUB" : data.azurerm_key_vault_secret.key_vault_bot_token.value,
-#    "CUCUMBER_PUBLISH_TOKEN" : data.azurerm_key_vault_secret.key_vault_cucumber_token.value,
+    "SLACK_WEBHOOK_URL": data.azurerm_key_vault_secret.key_vault_slack_webhook_url.value
   }
 }
 
@@ -79,3 +77,23 @@ resource "github_actions_secret" "repo_secrets" {
   plaintext_value = each.value
 }
 
+############
+## Labels ##
+############
+resource "github_issue_label" "breaking_change" {
+  repository = local.github.repository
+  name       = "breaking-change"
+  color      = "FF0000"
+}
+
+resource "github_issue_label" "new_release" {
+  repository = local.github.repository
+  name       = "new-release"
+  color      = "FFFF00"
+}
+
+resource "github_issue_label" "ignore_for_release" {
+  repository = local.github.repository
+  name       = "ignore-for-release"
+  color      = "008000"
+}

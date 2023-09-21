@@ -1,4 +1,4 @@
-name: Self Hosted Runner
+name: Deploy Azure function
 
 on:
   workflow_call:
@@ -11,75 +11,93 @@ on:
         required: true
         description: The environment target of the job
         type: string
-
-env:
-  NAMESPACE: nodo
-  APP_NAME: pagopanodoretodatastore
+      resource_group:
+        required: true
+        description: The resource group of the function to deploy
+        type: string
+      app_name:
+        required: true
+        description: The name of the function to deploy
+        type: string
+      registry_image:
+        required: true
+        description: The name of the image from container registry to be used
+        type: string
 
 permissions:
   id-token: write
   contents: read
 
 jobs:
-  create_runner:
-    name: Create Runner
+  show_input:
+    runs-on: ubuntu-latest
+    if: ${{ inputs.target == inputs.environment }}
+    steps:
+      - name: Get input parameters
+        run: |
+          echo environment=${{ inputs.environment }}
+          echo target=${{ inputs.target }}
+          echo resource_group=${{ inputs.resource_group }}
+          echo app_name=${{ inputs.app_name }}
+          echo registry_image=${{ inputs.registry_image }}
+  
+
+  # Starting the Azure Function's staging slot, if deploying in PROD
+  start_staging_slot:
+    name: Create staging slots
     runs-on: ubuntu-22.04
+    if: ${{ inputs.target == inputs.environment && inputs.target == 'prod' }}
     environment:
       name: ${{ inputs.environment }}
-    if: ${{ inputs.target == inputs.environment || inputs.environment == 'all' }}
-    outputs:
-      runner_name: ${{ steps.create_github_runner.outputs.runner_name }}
     steps:
-      - name: Create GitHub Runner
-        id: create_github_runner
-        # from https://github.com/pagopa/github-self-hosted-runner-azure-create-action/commits/main
-        uses: pagopa/github-self-hosted-runner-azure-create-action@v1.1.2
-        with:
-          client_id: ${{ secrets.CLIENT_ID }}
-          tenant_id: ${{ secrets.TENANT_ID }}
-          subscription_id: ${{ secrets.SUBSCRIPTION_ID }}
-          container_app_environment_name: ${{ secrets.CONTAINER_APP_ENVIRONMENT_NAME }}
-          resource_group_name: ${{ secrets.RUNNER_RESOURCE_GROUP_NAME }} # RG of the runner
-          pat_token: ${{ secrets.BOT_TOKEN_GITHUB }}
-          self_hosted_runner_image_tag: "v1.4.0"
-
-  deploy:
-    needs: [ create_runner ]
-    runs-on: [ self-hosted, "${{ needs.create_runner.outputs.runner_name }}" ]
-    if: ${{ inputs.target == inputs.environment || inputs.environment == 'all' }}
-    name: Deploy
-    environment: ${{ inputs.environment }}
-    steps:
-      - name: Deploy
-        uses: pagopa/github-actions-template/azure-functions-deploy@az-functions  # TODO set tag after PR merge
+      - name: Create staging slots
+        uses: pagopa/github-actions-template/azure-function-start-staging-slot@a1b72480e9ac555364be0b7ecdcc8f5ab1c89ad9
         with:
           branch: ${{ github.ref_name }}
           client_id: ${{ secrets.CLIENT_ID }}
-          subscription_id: ${{ secrets.SUBSCRIPTION_ID }}
           tenant_id: ${{ secrets.TENANT_ID }}
-          env: ${{ inputs.environment }}
-          namespace: ${{ env.NAMESPACE }}
-          cluster_name: ${{ secrets.CLUSTER_NAME }}
-          resource_group: ${{ secrets.CLUSTER_RESOURCE_GROUP_NAME }}
-          app_name: ${{ env.APP_NAME }}
+          subscription_id: ${{ secrets.SUBSCRIPTION_ID }}
+          resource_group: ${{ inputs.resource_group }}
+          app_name: ${{ inputs.app_name }}
+          registry_image: ${{ inputs.registry_image }}
 
 
-
-  cleanup_runner:
-    name: Cleanup Runner
-    needs: [ create_runner, deploy ]
-    if: ${{ success() || failure() && inputs.target == inputs.environment || inputs.environment == 'all' }}
+  # Executing the deploy of the Azure function with the new image
+  deploy:
+    name: Deploy Azure Function
     runs-on: ubuntu-22.04
-    environment: ${{ inputs.environment }}
+    needs: [ start_staging_slot ]
+    if: ${{ always() && inputs.target == inputs.environment }}
+    environment:
+      name: ${{ inputs.environment }}
     steps:
-      - name: Cleanup GitHub Runner
-        id: cleanup_github_runner
-        # from https://github.com/pagopa/github-self-hosted-runner-azure-cleanup-action/commits/main
-        uses: pagopa/github-self-hosted-runner-azure-cleanup-action@v1.0.3
+      - name: Deploy Azure Function
+        uses: pagopa/github-actions-template/azure-functions-deploy@a1b72480e9ac555364be0b7ecdcc8f5ab1c89ad9
         with:
+          branch: ${{ github.ref_name }}
           client_id: ${{ secrets.CLIENT_ID }}
           tenant_id: ${{ secrets.TENANT_ID }}
           subscription_id: ${{ secrets.SUBSCRIPTION_ID }}
-          resource_group_name: ${{ secrets.RUNNER_RESOURCE_GROUP_NAME }}
-          runner_name: ${{ needs.create_runner.outputs.runner_name }}
-          pat_token: ${{ secrets.BOT_TOKEN_GITHUB }}
+          app_name: ${{ inputs.app_name }}
+          registry_image: ${{ inputs.registry_image }}
+
+
+  # Stopping the Azure Function's staging slot, if deploying in PROD
+  stop_staging_slot:
+    name: Clean staging slots
+    needs: [ start_staging_slot, deploy ]
+    if: ${{ success() || failure() && (inputs.target == inputs.environment && inputs.target == 'prod') }}
+    runs-on: ubuntu-22.04
+    environment:
+      name: ${{ inputs.environment }}
+    steps:
+      - name: Deploy Azure Function
+        uses: pagopa/github-actions-template/azure-function-stop-staging-slot@a1b72480e9ac555364be0b7ecdcc8f5ab1c89ad9
+        with:
+          branch: ${{ github.ref_name }}
+          client_id: ${{ secrets.CLIENT_ID }}
+          tenant_id: ${{ secrets.TENANT_ID }}
+          subscription_id: ${{ secrets.SUBSCRIPTION_ID }}
+          resource_group: ${{ inputs.resource_group }}
+          app_name: ${{ inputs.app_name }}
+          registry_image: ${{ inputs.registry_image }}

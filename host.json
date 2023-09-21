@@ -29,10 +29,10 @@
     },
     "fileLoggingMode": "always",
     "logLevel": {
-      "default": "Debug",
-      "Host.Results": "Information",
-      "Function": "Error",
-      "Function.EventHubNodoReEventProcessor": "Debug",
+      "default": "Information",
+      "Host.Results": "Error",
+      "Function": "Information",
+      "Function.EventHubNodoReEventProcessor": "Error",
       "Host.Aggregator": "Trace"
     }
   }
