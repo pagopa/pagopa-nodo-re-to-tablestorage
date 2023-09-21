@@ -60,7 +60,9 @@ jobs:
     steps:
       - name: Semver setup
         id: semver_setup
-        uses: pagopa/github-actions-template/node-semver-setup@ff1d20edd8236ade3cb06020c273292b9a62d391
+        uses: pagopa/github-actions-template/node-semver-setup@a1b72480e9ac555364be0b7ecdcc8f5ab1c89ad9
+        with:
+          semver: ${{ inputs.semver }}
 
       # Set deploy variables
       - run: echo "ENV_SHORT=$(echo ${{steps.semver_setup.outputs.environment}} | cut -c1-1)" >>  $GITHUB_ENV
@@ -115,6 +117,7 @@ jobs:
     strategy:
       matrix:
         environment: [ dev, uat, prod ]
+    secrets: inherit
     uses: ./.github/workflows/04_self_hosted.yml
     with:
       environment: ${{ matrix.environment }}
@@ -122,7 +125,6 @@ jobs:
       resource_group: ${{ needs.setup.outputs.resource_group }}
       app_name: ${{ needs.setup.outputs.app_name }}
       registry_image: ${{ needs.release.outputs.registry_image }}
-    secrets: inherit
 
   notify:
     name: Notify
@@ -136,7 +138,7 @@ jobs:
         with:
           status: ${{ needs.deploy_azure_fn.result }}
           token: ${{ secrets.GITHUB_TOKEN }}
-          notification_title: 'New Release on ${{ needs.setup.outputs.environment }} ${{ needs.release.outputs.version }} has {status_message}'
+          notification_title: 'New Release on ${{ needs.setup.outputs.environment }} for ${{ needs.release.outputs.version }} has {status_message}'
           message_format: '{emoji} <{run_url}|{workflow}> {status_message} in <{repo_url}|{repo}>'
           footer: 'Linked to <{workflow_url}| workflow file>'
           icon_success: ':white_check_mark:'

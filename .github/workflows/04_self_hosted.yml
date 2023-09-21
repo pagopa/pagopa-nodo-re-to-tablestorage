@@ -29,6 +29,19 @@ permissions:
   contents: read
 
 jobs:
+  show_input:
+    runs-on: ubuntu-latest
+    if: ${{ inputs.target == inputs.environment }}
+    steps:
+      - name: Get input parameters
+        run: |
+          echo environment=${{ inputs.environment }}
+          echo target=${{ inputs.target }}
+          echo resource_group=${{ inputs.resource_group }}
+          echo app_name=${{ inputs.app_name }}
+          echo registry_image=${{ inputs.registry_image }}
+  
+
   # Starting the Azure Function's staging slot, if deploying in PROD
   start_staging_slot:
     name: Create staging slots
@@ -36,48 +49,55 @@ jobs:
     if: ${{ inputs.target == inputs.environment && inputs.target == 'prod' }}
     environment:
       name: ${{ inputs.environment }}
-    uses: pagopa/github-actions-template/azure-function-start-staging-slot@ff1d20edd8236ade3cb06020c273292b9a62d391
-    with:
-      branch: ${{ github.ref_name }}
-      client_id: ${{ secrets.CLIENT_ID }}
-      tenant_id: ${{ secrets.TENANT_ID }}
-      subscription_id: ${{ secrets.SUBSCRIPTION_ID }}
-      resource_group: ${{ inputs.resource_group }}
-      app_name: ${{ inputs.app_name }}
-      registry_image: ${{ inputs.registry_image }}
+    steps:
+      - name: Create staging slots
+        uses: pagopa/github-actions-template/azure-function-start-staging-slot@a1b72480e9ac555364be0b7ecdcc8f5ab1c89ad9
+        with:
+          branch: ${{ github.ref_name }}
+          client_id: ${{ secrets.CLIENT_ID }}
+          tenant_id: ${{ secrets.TENANT_ID }}
+          subscription_id: ${{ secrets.SUBSCRIPTION_ID }}
+          resource_group: ${{ inputs.resource_group }}
+          app_name: ${{ inputs.app_name }}
+          registry_image: ${{ inputs.registry_image }}
 
 
   # Executing the deploy of the Azure function with the new image
   deploy:
     name: Deploy Azure Function
     runs-on: ubuntu-22.04
-    needs: [ create_staging_slot ]
+    needs: [ start_staging_slot ]
+    if: ${{ always() && inputs.target == inputs.environment }}
     environment:
       name: ${{ inputs.environment }}
-    uses: pagopa/github-actions-template/azure-function-deploy@ff1d20edd8236ade3cb06020c273292b9a62d391
-    with:
-      branch: ${{ github.ref_name }}
-      client_id: ${{ secrets.CLIENT_ID }}
-      tenant_id: ${{ secrets.TENANT_ID }}
-      subscription_id: ${{ secrets.SUBSCRIPTION_ID }}
-      app_name: ${{ inputs.app_name }}
-      registry_image: ${{ inputs.registry_image }}
+    steps:
+      - name: Deploy Azure Function
+        uses: pagopa/github-actions-template/azure-functions-deploy@a1b72480e9ac555364be0b7ecdcc8f5ab1c89ad9
+        with:
+          branch: ${{ github.ref_name }}
+          client_id: ${{ secrets.CLIENT_ID }}
+          tenant_id: ${{ secrets.TENANT_ID }}
+          subscription_id: ${{ secrets.SUBSCRIPTION_ID }}
+          app_name: ${{ inputs.app_name }}
+          registry_image: ${{ inputs.registry_image }}
 
 
   # Stopping the Azure Function's staging slot, if deploying in PROD
   stop_staging_slot:
     name: Clean staging slots
-    needs: [ create_staging_slot, deploy ]
+    needs: [ start_staging_slot, deploy ]
     if: ${{ success() || failure() && (inputs.target == inputs.environment && inputs.target == 'prod') }}
     runs-on: ubuntu-22.04
     environment:
       name: ${{ inputs.environment }}
-    uses: pagopa/github-actions-template/azure-function-stop-staging-slot@ff1d20edd8236ade3cb06020c273292b9a62d391
-    with:
-      branch: ${{ github.ref_name }}
-      client_id: ${{ secrets.CLIENT_ID }}
-      tenant_id: ${{ secrets.TENANT_ID }}
-      subscription_id: ${{ secrets.SUBSCRIPTION_ID }}
-      resource_group: ${{ inputs.resource_group }}
-      app_name: ${{ inputs.app_name }}
-      registry_image: ${{ inputs.registry_image }}
+    steps:
+      - name: Deploy Azure Function
+        uses: pagopa/github-actions-template/azure-function-stop-staging-slot@a1b72480e9ac555364be0b7ecdcc8f5ab1c89ad9
+        with:
+          branch: ${{ github.ref_name }}
+          client_id: ${{ secrets.CLIENT_ID }}
+          tenant_id: ${{ secrets.TENANT_ID }}
+          subscription_id: ${{ secrets.SUBSCRIPTION_ID }}
+          resource_group: ${{ inputs.resource_group }}
+          app_name: ${{ inputs.app_name }}
+          registry_image: ${{ inputs.registry_image }}
